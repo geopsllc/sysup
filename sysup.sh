@@ -32,7 +32,7 @@ for arg in "$@"; do
     -f|--force) FORCE_UPDATE=1 ;;
     -h|--help)
       echo "Usage: sysup [-f|--force]"
-      echo "  -f, --force   run apt update even if it already ran today"
+      echo "  -f, --force   run apt update even if it ran in the last 6 hours"
       exit 0 ;;
     *) echo "sysup: unknown option: ${arg}" >&2; exit 2 ;;
   esac
@@ -89,19 +89,25 @@ apt_get -f install
 SYSUP_STAMP=/var/lib/sysup/update-stamp
 APT_STAMP=/var/lib/apt/periodic/update-success-stamp   # touched by any apt update on Ubuntu
 
-updated_today() {
-  local today f
-  today="$(date +%F)"
+UPDATE_MAX_AGE_HOURS=6   # skip apt update if lists were refreshed more recently than this
+
+# Succeeds if either stamp is newer than UPDATE_MAX_AGE_HOURS; sets UPDATE_AGE.
+updated_recently() {
+  local now f age
+  now="$(date +%s)"
   for f in "${SYSUP_STAMP}" "${APT_STAMP}"; do
-    if [ -f "${f}" ] && [ "$(date -r "${f}" +%F)" = "${today}" ]; then
+    [ -f "${f}" ] || continue
+    age=$(( now - $(stat -c %Y "${f}") ))
+    if [ "${age}" -ge 0 ] && [ "${age}" -lt $(( UPDATE_MAX_AGE_HOURS * 3600 )) ]; then
+      UPDATE_AGE="$(( age / 3600 ))h $(( age % 3600 / 60 ))m"
       return 0
     fi
   done
   return 1
 }
 
-if [ "${FORCE_UPDATE}" -eq 0 ] && updated_today; then
-  step "Package lists already updated today, skipping (use -f to force)"
+if [ "${FORCE_UPDATE}" -eq 0 ] && updated_recently; then
+  step "Package lists updated ${UPDATE_AGE} ago (under ${UPDATE_MAX_AGE_HOURS}h), skipping (use -f to force)"
 else
   step "Updating package lists"
   apt_get --allow-releaseinfo-change update

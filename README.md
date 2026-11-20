@@ -20,14 +20,18 @@ Supports current Debian (11+) and Ubuntu (20.04+) releases.
 When run in a terminal (including over SSH), it shows apt's colors and progress bar. When output goes to
 a pipe, file or cron, it falls back to plain `apt-get` output.
 
-Package lists are refreshed at most once a day. If `apt update` already ran today (by sysup, or by Ubuntu's
-daily apt timer), that step is skipped. To force it:
+If `apt update` already ran in the last 6 hours (by sysup, or by Ubuntu's daily apt timer), that step is
+skipped. The window is set by `UPDATE_MAX_AGE_HOURS` at the top of the update section in `sysup.sh`. To force it:
 
 ```sh
 sysup -f
 ```
 
 ## Changelog
+
+### 0.4
+- skip `apt update` if package lists were updated in the last 6 hours, instead of "today"
+- list packages that need a reboot under a "for:" heading
 
 ### 0.3
 - colors and progress bar when run in a terminal (uses `apt`); plain `apt-get` output otherwise
