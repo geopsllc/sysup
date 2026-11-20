@@ -119,9 +119,11 @@ step "Cleaning package cache"
 apt_get autoclean
 
 if [ -f /var/run/reboot-required ]; then
-  step "A reboot is required to finish the upgrade"
-  if [ -f /var/run/reboot-required.pkgs ]; then
-    sort -u /var/run/reboot-required.pkgs | sed 's/^/    /'
+  if [ -s /var/run/reboot-required.pkgs ]; then
+    step "A reboot is required to finish the upgrade for:"
+    sort -u /var/run/reboot-required.pkgs | sed 's/^/    - /'
+  else
+    step "A reboot is required to finish the upgrade"
   fi
 fi
 
