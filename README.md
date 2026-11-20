@@ -17,7 +17,21 @@ at the end.
 
 Supports current Debian (11+) and Ubuntu (20.04+) releases.
 
+When run in a terminal (including over SSH), it shows apt's colors and progress bar. When output goes to
+a pipe, file or cron, it falls back to plain `apt-get` output.
+
+Package lists are refreshed at most once a day. If `apt update` already ran today (by sysup, or by Ubuntu's
+daily apt timer), that step is skipped. To force it:
+
+```sh
+sysup -f
+```
+
 ## Changelog
+
+### 0.3
+- colors and progress bar when run in a terminal (uses `apt`); plain `apt-get` output otherwise
+- skip `apt update` if package lists were already updated today; `-f` / `--force` to override
 
 ### 0.2
 - add `apt-get update` before upgrading

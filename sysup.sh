@@ -26,6 +26,18 @@ if [ "${EUID}" -ne 0 ]; then
   exec sudo -- "${SCRIPT_PATH}" "$@"
 fi
 
+FORCE_UPDATE=0
+for arg in "$@"; do
+  case "${arg}" in
+    -f|--force) FORCE_UPDATE=1 ;;
+    -h|--help)
+      echo "Usage: sysup [-f|--force]"
+      echo "  -f, --force   run apt update even if it already ran today"
+      exit 0 ;;
+    *) echo "sysup: unknown option: ${arg}" >&2; exit 2 ;;
+  esac
+done
+
 if ! command -v apt-get >/dev/null 2>&1; then
   echo "sysup: apt-get not found; this script supports Debian/Ubuntu only." >&2
   exit 1
@@ -41,15 +53,28 @@ export APT_LISTCHANGES_FRONTEND=none     # no changelog pager
 export LC_ALL=C.UTF-8                    # avoid locale warnings on minimal systems
 
 APT_OPTS=(
-  -y -q
+  -y
   -o Dpkg::Options::=--force-confdef     # take the default action for conffiles...
   -o Dpkg::Options::=--force-confold     # ...and otherwise keep the installed version
   -o DPkg::Lock::Timeout=600             # wait for unattended-upgrades instead of failing
   -o APT::Get::Assume-Yes=true
 )
 
+# On a terminal, use `apt` with its colors and progress bar, as when run by
+# hand. Otherwise (cron, pipes, logs) use quiet, script-stable `apt-get`.
+if [ -t 1 ]; then
+  APT_BIN=apt
+  APT_OPTS+=(
+    -o APT::Color=1
+    -o Dpkg::Progress-Fancy=1
+  )
+else
+  APT_BIN=apt-get
+  APT_OPTS+=(-q)
+fi
+
 apt_get() {
-  apt-get "${APT_OPTS[@]}" "$@" </dev/null
+  "${APT_BIN}" "${APT_OPTS[@]}" "$@" </dev/null
 }
 
 step() {
@@ -61,8 +86,28 @@ step "Recovering any interrupted package operations"
 dpkg --configure -a --force-confdef --force-confold </dev/null
 apt_get -f install
 
-step "Updating package lists"
-apt_get --allow-releaseinfo-change update
+SYSUP_STAMP=/var/lib/sysup/update-stamp
+APT_STAMP=/var/lib/apt/periodic/update-success-stamp   # touched by any apt update on Ubuntu
+
+updated_today() {
+  local today f
+  today="$(date +%F)"
+  for f in "${SYSUP_STAMP}" "${APT_STAMP}"; do
+    if [ -f "${f}" ] && [ "$(date -r "${f}" +%F)" = "${today}" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if [ "${FORCE_UPDATE}" -eq 0 ] && updated_today; then
+  step "Package lists already updated today, skipping (use -f to force)"
+else
+  step "Updating package lists"
+  apt_get --allow-releaseinfo-change update
+  mkdir -p "$(dirname "${SYSUP_STAMP}")"
+  touch "${SYSUP_STAMP}"
+fi
 
 step "Upgrading packages"
 apt_get full-upgrade
